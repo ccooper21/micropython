@@ -2,7 +2,7 @@ import sys
 import struct
 import hashlib
 
-SEGS_MAX_SIZE = 0x9000
+SEGS_MAX_SIZE = 0x10000
 
 assert len(sys.argv) == 4
 

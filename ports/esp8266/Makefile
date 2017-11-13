@@ -4,7 +4,8 @@ include ../../py/mkenv.mk
 QSTR_DEFS = qstrdefsport.h #$(BUILD)/pins_qstr.h
 
 MICROPY_PY_USSL = 1
-MICROPY_SSL_AXTLS = 1
+MICROPY_SSL_AXTLS = 0
+MICROPY_SSL_MBEDTLS = 1
 MICROPY_FATFS = 1
 MICROPY_PY_BTREE = 1
 BTREE_DEFS_EXTRA = -DDEFPSIZE=1024 -DMINCACHE=3
@@ -39,11 +40,11 @@ CFLAGS_XTENSA = -fsingle-precision-constant -Wdouble-promotion \
 	-DLWIP_OPEN_SRC
 
 CFLAGS = $(INC) -Wall -Wpointer-arith -Werror -std=gnu99 -nostdlib -DUART_OS=$(UART_OS) \
-	$(CFLAGS_XTENSA) $(CFLAGS_MOD) $(COPT) $(CFLAGS_EXTRA)
+	$(CFLAGS_XTENSA) $(CFLAGS_MOD) $(COPT) $(CFLAGS_EXTRA) -DMBEDTLS_CONFIG_FILE='"config_esp.h"'
 
 LDSCRIPT = esp8266.ld
 LDFLAGS = -nostdlib -T $(LDSCRIPT) -Map=$(@:.elf=.map) --cref
-LIBS = -L$(ESP_SDK)/lib -lmain -ljson -llwip_open -lpp -lnet80211 -lwpa -lphy -lnet80211 $(LDFLAGS_MOD)
+LIBS = -Lbuild -L$(ESP_SDK)/lib -lmain -ljson -lpp -lnet80211 -lwpa -lphy -lnet80211 -llwip -lmbedtls
 
 LIBGCC_FILE_NAME = $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
 LIBS += -L$(dir $(LIBGCC_FILE_NAME)) -lgcc
@@ -150,7 +151,7 @@ SRC_QSTR += $(SRC_C) $(EXTMOD_SRC_C) $(LIB_SRC_C) $(DRIVERS_SRC_C)
 # Append any auto-generated sources that are needed by sources listed in SRC_QSTR
 SRC_QSTR_AUTO_DEPS +=
 
-all: $(BUILD)/libaxtls.a $(FWBIN)
+all: $(BUILD)/liblwip.a $(BUILD)/libmbedtls.a $(FWBIN)
 
 CONFVARS_FILE = $(BUILD)/confvars
 
@@ -181,7 +182,7 @@ reset:
 $(FWBIN): $(BUILD)/firmware.elf
 	$(ECHO) "Create $@"
 	$(Q)esptool.py elf2image $^
-	$(Q)$(PYTHON) makeimg.py $(BUILD)/firmware.elf-0x00000.bin $(BUILD)/firmware.elf-0x[0-5][1-f]000.bin $@
+	$(Q)$(PYTHON) makeimg.py $(BUILD)/firmware.elf-0x00000.bin $(BUILD)/firmware.elf-0x10000.bin $@
 
 $(BUILD)/firmware.elf: $(OBJ)
 	$(ECHO) "LINK $@"
@@ -231,6 +232,18 @@ $(BUILD)/libaxtls.a:
 	cd $(TOP)/lib/axtls; $(MAKE) clean
 	cd $(TOP)/lib/axtls; $(MAKE) all CC="$(CC)" LD="$(LD)" AR="$(AR)" CFLAGS_EXTRA="$(CFLAGS_XTENSA) -Dabort=abort_ -DRT_MAX_PLAIN_LENGTH=1024 -DRT_EXTRA=4096"
 	cp $(TOP)/lib/axtls/_stage/libaxtls.a $@
+
+mbedtls: $(BUILD)/liblwip.a $(BUILD)/libmbedtls.a
+
+$(BUILD)/liblwip.a:
+	test -d $(BUILD)/lwip || mkdir -p $(BUILD)/lwip
+	cp -r $(TOP)/../esp-sdk/ESP8266_NONOS_SDK/third_party/include/lwip/* $(BUILD)/lwip
+	cp $(TOP)/../esp-sdk/ESP8266_NONOS_SDK/lib/liblwip.a $@
+
+$(BUILD)/libmbedtls.a:
+	test -d $(BUILD)/mbedtls || mkdir -p $(BUILD)/mbedtls
+	cp -r $(TOP)/../esp-sdk/ESP8266_NONOS_SDK/third_party/include/mbedtls/* $(BUILD)/mbedtls
+	cp $(TOP)/../esp-sdk/ESP8266_NONOS_SDK/lib/libmbedtls.a $@
 
 clean-modules:
 	git clean -f -d modules
